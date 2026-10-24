@@ -45,7 +45,7 @@ public class BorrowDAO {
             }
 
             if (record.getDaysKept() == null) {
-                ps.setNull(5, java.sql.Types.INTEGER);
+                ps.setInt(5, 0);
             } else {
                 ps.setInt(5, record.getDaysKept());
             }
@@ -111,4 +111,120 @@ public class BorrowDAO {
             return ps.executeUpdate() > 0;
         }
     }
+
+    // Get all borrowing records enriched with member and book details
+    public List<BorrowRecordDetail> getDetailedBorrowRecords() throws SQLException {
+        List<BorrowRecordDetail> list = new ArrayList<>();
+        String sql = "SELECT br.record_id, br.member_id, m.name AS member_name, " +
+                     "       br.book_id, b.title AS book_title, " +
+                     "       br.issue_date, br.return_date, br.days_kept, br.fine " +
+                     "FROM borrow_records br " +
+                     "LEFT JOIN members m ON br.member_id = m.member_id " +
+                     "LEFT JOIN books b ON br.book_id = b.book_id " +
+                     "ORDER BY br.record_id DESC";
+
+        try (Connection con = Database_connection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                Date issueSql = rs.getDate("issue_date");
+                Date returnSql = rs.getDate("return_date");
+                int days = rs.getInt("days_kept");
+                Integer daysKept = rs.wasNull() ? null : days;
+
+                list.add(new BorrowRecordDetail(
+                        rs.getInt("record_id"),
+                        rs.getString("member_id"),
+                        rs.getString("member_name"),
+                        rs.getString("book_id"),
+                        rs.getString("book_title"),
+                        issueSql == null ? null : issueSql.toLocalDate(),
+                        returnSql == null ? null : returnSql.toLocalDate(),
+                        daysKept,
+                        rs.getDouble("fine")
+                ));
+            }
+        }
+        return list;
+    }
+
+    // Get only active (unreturned) borrowing records enriched with details
+    public List<BorrowRecordDetail> getActiveDetailedBorrowRecords() throws SQLException {
+        List<BorrowRecordDetail> list = new ArrayList<>();
+        String sql = "SELECT br.record_id, br.member_id, m.name AS member_name, " +
+                     "       br.book_id, b.title AS book_title, " +
+                     "       br.issue_date, br.return_date, br.days_kept, br.fine " +
+                     "FROM borrow_records br " +
+                     "LEFT JOIN members m ON br.member_id = m.member_id " +
+                     "LEFT JOIN books b ON br.book_id = b.book_id " +
+                     "WHERE br.return_date IS NULL " +
+                     "ORDER BY br.record_id DESC";
+
+        try (Connection con = Database_connection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                Date issueSql = rs.getDate("issue_date");
+                int days = rs.getInt("days_kept");
+                Integer daysKept = rs.wasNull() ? null : days;
+
+                list.add(new BorrowRecordDetail(
+                        rs.getInt("record_id"),
+                        rs.getString("member_id"),
+                        rs.getString("member_name"),
+                        rs.getString("book_id"),
+                        rs.getString("book_title"),
+                        issueSql == null ? null : issueSql.toLocalDate(),
+                        null,
+                        daysKept,
+                        rs.getDouble("fine")
+                ));
+            }
+        }
+        return list;
+    }
+
+    // Count of active loans currently outstanding
+    public int getActiveLoansCount() throws SQLException {
+        String sql = "SELECT COUNT(*) FROM borrow_records WHERE return_date IS NULL";
+        try (Connection con = Database_connection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        }
+        return 0;
+    }
+
+    // Total fine revenue collected
+    public double getTotalFinesCollected() throws SQLException {
+        String sql = "SELECT COALESCE(SUM(fine), 0.0) FROM borrow_records WHERE return_date IS NOT NULL";
+        try (Connection con = Database_connection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                return rs.getDouble(1);
+            }
+        }
+        return 0.0;
+    }
+
+    // Count of active loans for a specific member
+    public int getActiveLoanCountForMember(String memberId) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM borrow_records WHERE member_id = ? AND return_date IS NULL";
+        try (Connection con = Database_connection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, memberId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        }
+        return 0;
+    }
 }
+

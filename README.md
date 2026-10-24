@@ -1,16 +1,16 @@
-# BookNest – Library Management System (Phase 1)
+# BookNest – Library Management System (Phase 1 & Phase 2)
 
-A robust, console-based Library Management System developed using **Java**, **JDBC**, and **MySQL 8**. BookNest provides an automated solution for managing books, members, and book borrowing/returning transactions with fine calculation and real-time inventory tracking.
+A robust Library Management System developed using **Java**, **JDBC**, **MySQL 8**, and **Java Swing**. BookNest provides an automated solution for managing books, members, and book borrowing/returning transactions with fine calculation, real-time inventory tracking, and a modern desktop graphical user interface.
 
 ---
 
 ## 📌 Project Overview
 
 - **Project Name:** BookNest Library Management System
-- **Phase:** Phase 1 – Core Logic, Database Design & Console Interface
-- **Technology Stack:** Java SE, JDBC (Java Database Connectivity), MySQL 8
+- **Phase:** Phase 1 (Core Logic & Console Interface) & Phase 2 (Modern Java Swing Desktop GUI)
+- **Technology Stack:** Java SE, Java Swing (Modern Custom Slate Theme), JDBC, MySQL 8
 - **IDE & Platform:** Visual Studio Code / Windows PowerShell
-- **Architecture:** Layered Architecture (Model-DAO-Service-Controller)
+- **Architecture:** Layered Architecture (Model-DAO-Service-GUI/Controller)
 
 ---
 
@@ -197,9 +197,16 @@ javac -cp ".;lib\*" -d out src\*.java
 ```
 
 ### 2. Run the Application
-Launch the BookNest console application:
+
+#### Launch Modern Desktop GUI (Default):
 ```powershell
 java -cp "out;lib\*" Main
+```
+*(Or directly via `java -cp "out;lib\*" BookNestGUI`)*
+
+#### Launch Classic Console Interface:
+```powershell
+java -cp "out;lib\*" Main --console
 ```
 
 ### 3. Compile Standalone Tests (Optional)
@@ -216,8 +223,14 @@ java -cp "out;lib\*" TestConnection
 
 ---
 
-## 🔮 Roadmap / Phase 2
+## 🎨 Phase 2 – Modern Graphical User Interface (GUI)
 
-- **Graphical User Interface (GUI):** Build a responsive desktop UI using Java Swing.
-- **Role-based Authentication:** Separate Librarian and Member logins.
-- **Advanced Filtering & Reporting:** Overdue alerts, PDF receipt generation, and statistical dashboards.
+BookNest now features a desktop GUI built with **Java Swing** and custom components:
+
+- **📊 Live Dashboard:** Real-time stat cards (Total Titles, Shelf Copies, Active Members, Active Borrowings, Total Fines Collected) and quick action shortcuts.
+- **📚 Book Inventory:** Searchable catalog with instant real-time filtering, stock status pills (Available, Low Stock, Out of Stock), modal dialog for registering books, and safe deletion.
+- **👥 Member Directory:** Searchable directory with real-time tracking of active loans per member (enforcing the 3-book limit) and membership status badges.
+- **🔄 Issue Book Circulation:** Intuitive book checkout workflow with member and book dropdowns, active loan limit validation, and live member borrowing previews.
+- **📥 Return & Fine Assessment:** Active loan tracker with instant 1-click return, automatic overdue calculations (7 days grace period, ₹2.00/day fine), and instant inventory restocking.
+- **📜 Transaction Audit History:** Filterable circulation records (All, Active Loans, Returned) with member names, book titles, dates, days kept, and fine amounts.
+

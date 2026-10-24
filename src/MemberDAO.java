@@ -78,4 +78,63 @@ public class MemberDAO {
 
         return null;
     }
+
+    // Total registered members
+    public int getTotalMembersCount() throws SQLException {
+        String sql = "SELECT COUNT(*) FROM members";
+        try (Connection con = Database_connection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        }
+        return 0;
+    }
+
+    // Safely delete a member if no active or historical loans
+    public boolean deleteMember(String memberId) throws SQLException {
+        // Check active loans
+        String checkSql = "SELECT COUNT(*) FROM borrow_records WHERE member_id = ? AND return_date IS NULL";
+        try (Connection con = Database_connection.getConnection();
+             PreparedStatement ps = con.prepareStatement(checkSql)) {
+            ps.setString(1, memberId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) {
+                    throw new SQLException("Cannot delete member: Member has unreturned borrowed books.");
+                }
+            }
+        }
+
+        // Check historical records
+        String histSql = "SELECT COUNT(*) FROM borrow_records WHERE member_id = ?";
+        try (Connection con = Database_connection.getConnection();
+             PreparedStatement ps = con.prepareStatement(histSql)) {
+            ps.setString(1, memberId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) {
+                    throw new SQLException("Cannot delete member: Member has historical borrowing transactions on record.");
+                }
+            }
+        }
+
+        String deleteSql = "DELETE FROM members WHERE member_id = ?";
+        try (Connection con = Database_connection.getConnection();
+             PreparedStatement ps = con.prepareStatement(deleteSql)) {
+            ps.setString(1, memberId);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    // Update existing member details
+    public boolean updateMember(Member member) throws SQLException {
+        String sql = "UPDATE members SET name = ? WHERE member_id = ?";
+        try (Connection con = Database_connection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, member.getName());
+            ps.setString(2, member.getMemberId());
+            return ps.executeUpdate() > 0;
+        }
+    }
 }
+

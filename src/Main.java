@@ -12,7 +12,29 @@ public class Main {
     private static final LibraryService libraryService = new LibraryService();
 
     public static void main(String[] args) {
+        if (args.length > 0 && ("--console".equalsIgnoreCase(args[0]) || "-c".equalsIgnoreCase(args[0]))) {
+            runConsole();
+        } else {
+            // Enable text anti-aliasing for high-DPI displays
+            System.setProperty("awt.useSystemAAFontSettings", "on");
+            System.setProperty("swing.aatext", "true");
 
+            System.out.println("Starting BookNest Library Management System (GUI Mode)...");
+            System.out.println("Tip: To run the console interface instead, launch with: java -cp \"out;lib\\*\" Main --console");
+
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                try {
+                    // Try to use system look and feel
+                    javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getSystemLookAndFeelClassName());
+                } catch (Exception ignored) {
+                }
+                BookNestGUI gui = new BookNestGUI();
+                gui.setVisible(true);
+            });
+        }
+    }
+
+    public static void runConsole() {
         boolean running = true;
 
         while (running) {
@@ -74,6 +96,7 @@ public class Main {
 
         scanner.close();
     }
+
 
     private static void addBook() throws SQLException {
         System.out.println("\n--- Add Book ---");
