@@ -34,7 +34,12 @@ public class BookNestGUI extends JFrame {
     private UITheme.StatCard statTotalCopies;
     private UITheme.StatCard statTotalMembers;
     private UITheme.StatCard statActiveLoans;
+    private UITheme.StatCard statLifetimeIssued;
     private DefaultTableModel dashboardActiveLoansModel;
+
+    // Sidebar DB status labels
+    private JLabel statusDot;
+    private JLabel statusSub;
 
     // Books view
     private DefaultTableModel booksTableModel;
@@ -206,18 +211,20 @@ public class BookNestGUI extends JFrame {
             navPanel.add(Box.createVerticalStrut(6));
         }
 
-        // Sidebar Footer Status Widget
+        // Sidebar Footer Status Widget (Dynamically reflects real database connection state)
         UITheme.RoundedPanel statusPanel = new UITheme.RoundedPanel(12, new Color(24, 34, 53), UITheme.COLOR_BORDER);
         statusPanel.setLayout(new BorderLayout(8, 6));
         statusPanel.setBorder(new EmptyBorder(14, 14, 14, 14));
 
-        JLabel statusDot = new JLabel("● MySQL 8.0 Connected");
+        statusDot = new JLabel("● Checking Connection...");
         statusDot.setFont(UITheme.FONT_BODY_BOLD);
-        statusDot.setForeground(UITheme.COLOR_SUCCESS);
+        statusDot.setForeground(UITheme.COLOR_WARNING);
 
-        JLabel statusSub = new JLabel("localhost:3306 • booknest");
+        statusSub = new JLabel("localhost:3306 • booknest");
         statusSub.setFont(UITheme.FONT_SMALL);
         statusSub.setForeground(UITheme.COLOR_TEXT_MUTED);
+
+        updateConnectionStatus();
 
         statusPanel.add(statusDot, BorderLayout.NORTH);
         statusPanel.add(statusSub, BorderLayout.SOUTH);
@@ -232,6 +239,23 @@ public class BookNestGUI extends JFrame {
         sidebar.add(footerWrapper, BorderLayout.SOUTH);
 
         return sidebar;
+    }
+
+    /**
+     * Dynamically verifies active database connectivity and updates the sidebar indicator.
+     */
+    private void updateConnectionStatus() {
+        if (statusDot == null || statusSub == null) return;
+        boolean connected = Database_connection.testConnection();
+        if (connected) {
+            statusDot.setText("● MySQL 8.0 Connected");
+            statusDot.setForeground(UITheme.COLOR_SUCCESS);
+            statusSub.setText(Database_connection.getConnectionInfo());
+        } else {
+            statusDot.setText("● Database Offline");
+            statusDot.setForeground(UITheme.COLOR_DANGER);
+            statusSub.setText("Check MySQL / db.properties");
+        }
     }
 
     private void switchView(String viewId, int btnIndex) {
@@ -330,19 +354,21 @@ public class BookNestGUI extends JFrame {
         panel.setOpaque(false);
         panel.setBorder(new EmptyBorder(24, 28, 24, 28));
 
-        // Top 4 Stat Cards
-        JPanel statsGrid = new JPanel(new GridLayout(1, 4, 18, 0));
+        // Top 5 Stat Cards (Includes Static Lifetime Total Issued Counter)
+        JPanel statsGrid = new JPanel(new GridLayout(1, 5, 14, 0));
         statsGrid.setOpaque(false);
 
         statTotalBooks = new UITheme.StatCard("Total Titles", "0", "0 distinct books", UITheme.COLOR_PRIMARY, "📚");
         statTotalCopies = new UITheme.StatCard("Total Copies", "0", "0 available to borrow", UITheme.COLOR_CYAN, "📖");
         statTotalMembers = new UITheme.StatCard("Active Members", "0", "Registered patrons", UITheme.COLOR_SUCCESS, "👥");
         statActiveLoans = new UITheme.StatCard("Active Loans", "0", "₹0.00 fines collected", UITheme.COLOR_WARNING, "🔄");
+        statLifetimeIssued = new UITheme.StatCard("Lifetime Issued", "0", "Static counter total", UITheme.COLOR_PRIMARY, "📦");
 
         statsGrid.add(statTotalBooks);
         statsGrid.add(statTotalCopies);
         statsGrid.add(statTotalMembers);
         statsGrid.add(statActiveLoans);
+        statsGrid.add(statLifetimeIssued);
 
         panel.add(statsGrid, BorderLayout.NORTH);
 
@@ -916,9 +942,8 @@ public class BookNestGUI extends JFrame {
 
                     LocalDate issueDate = d.getIssueDate();
                     LocalDate today = LocalDate.now();
-                    long daysBetween = ChronoUnit.DAYS.between(issueDate, today);
-                    int daysKept = Math.toIntExact(daysBetween + 1);
-                    double fine = Math.max(0, daysKept - 7) * 2.0;
+                    int daysKept = LibraryService.calculateDaysKept(issueDate, today);
+                    double fine = LibraryService.calculateFine(daysKept);
 
                     returnSelectedLoanLabel.setText("<html><b>Borrower:</b> " + d.getMemberName() + " (" + d.getMemberId() + ")<br/>" +
                             "<b>Book:</b> " + d.getBookTitle() + " (" + d.getBookId() + ")<br/>" +
@@ -1058,6 +1083,9 @@ public class BookNestGUI extends JFrame {
     // ==========================================
     public void refreshAllData() {
         try {
+            // 0. Update real DB connection indicator
+            updateConnectionStatus();
+
             // 1. Dashboard Stats
             int totalBooks = bookDAO.getTotalBooksCount();
             int totalCopies = bookDAO.getTotalCopiesCount();
@@ -1065,6 +1093,7 @@ public class BookNestGUI extends JFrame {
             int totalMembers = memberDAO.getTotalMembersCount();
             int activeLoans = borrowDAO.getActiveLoansCount();
             double totalFines = borrowDAO.getTotalFinesCollected();
+            int lifetimeIssued = LibraryService.getTotalLifetimeIssued();
 
             statTotalBooks.setValue(String.valueOf(totalBooks));
             statTotalBooks.setSubtitle(totalCopies + " physical copies total");
@@ -1078,6 +1107,9 @@ public class BookNestGUI extends JFrame {
             statActiveLoans.setValue(String.valueOf(activeLoans));
             statActiveLoans.setSubtitle("₹" + String.format("%.2f", totalFines) + " fines collected");
 
+            statLifetimeIssued.setValue(String.valueOf(lifetimeIssued));
+            statLifetimeIssued.setSubtitle("Static counter • " + (lifetimeIssued - activeLoans) + " returned");
+
             // 2. Active Loans (Dashboard + Return Table)
             List<BorrowRecordDetail> activeList = borrowDAO.getActiveDetailedBorrowRecords();
 
@@ -1086,8 +1118,8 @@ public class BookNestGUI extends JFrame {
             LocalDate today = LocalDate.now();
 
             for (BorrowRecordDetail d : activeList) {
-                long days = ChronoUnit.DAYS.between(d.getIssueDate(), today) + 1;
-                double estFine = Math.max(0, days - 7) * 2.0;
+                int days = LibraryService.calculateDaysKept(d.getIssueDate(), today);
+                double estFine = LibraryService.calculateFine(days);
 
                 dashboardActiveLoansModel.addRow(new Object[]{
                         d.getRecordId(), d.getMemberId(), d.getMemberName(),
@@ -1179,10 +1211,11 @@ public class BookNestGUI extends JFrame {
 
     private void searchBooks(String query) {
         try {
-            if (query.isEmpty()) {
+            if (query == null || query.trim().isEmpty()) {
                 loadBooksTable(bookDAO.getAllBooks());
             } else {
-                loadBooksTable(bookDAO.searchBooksByTitle(query));
+                // Unified search: matches Book ID exact/partial, Title keyword, or Author keyword
+                loadBooksTable(libraryService.searchBooks(query.trim()));
             }
         } catch (SQLException e) {
             UITheme.showError(this, "Search error: " + e.getMessage(), "Search Failed");
@@ -1329,8 +1362,10 @@ public class BookNestGUI extends JFrame {
                 } else {
                     UITheme.showError(dialog, "Could not add book. Please check for duplicate ID.", "Error");
                 }
+            } catch (IllegalArgumentException ex) {
+                UITheme.showError(dialog, ex.getMessage(), "Validation Error");
             } catch (SQLException ex) {
-                UITheme.showError(dialog, "Database error: " + ex.getMessage(), "Error");
+                UITheme.showError(dialog, ex.getMessage(), "Database Error");
             }
         });
 
@@ -1395,8 +1430,10 @@ public class BookNestGUI extends JFrame {
                 } else {
                     UITheme.showError(dialog, "Could not register member. Check for duplicate ID.", "Error");
                 }
+            } catch (IllegalArgumentException ex) {
+                UITheme.showError(dialog, ex.getMessage(), "Validation Error");
             } catch (SQLException ex) {
-                UITheme.showError(dialog, "Database error: " + ex.getMessage(), "Error");
+                UITheme.showError(dialog, ex.getMessage(), "Database Error");
             }
         });
 

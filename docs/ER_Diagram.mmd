@@ -1,0 +1,26 @@
+erDiagram
+    MEMBERS ||--o{ BORROW_RECORDS : "places / borrows"
+    BOOKS ||--o{ BORROW_RECORDS : "circulates in"
+
+    MEMBERS {
+        varchar(20) member_id PK "Unique Member Identifier"
+        varchar(100) name "Full Patron Name (NOT NULL)"
+    }
+
+    BOOKS {
+        varchar(20) book_id PK "Unique Book Identifier (ISBN/Catalog No)"
+        varchar(150) title "Book Title (NOT NULL)"
+        varchar(100) author "Author Name (NOT NULL)"
+        int total_copies "Total Physical Copies (CHECK >= 0)"
+        int available_copies "Available Copies (CHECK >= 0, <= total_copies)"
+    }
+
+    BORROW_RECORDS {
+        int record_id PK "Auto Increment Primary Key"
+        varchar(20) member_id FK "References MEMBERS(member_id)"
+        varchar(20) book_id FK "References BOOKS(book_id)"
+        date issue_date "Date Borrowed (NOT NULL)"
+        date return_date "Date Returned (NULL if Active Loan)"
+        int days_kept "Inclusive Days Kept (DEFAULT 0, CHECK >= 0)"
+        decimal(10,2) fine "Overdue Fine in INR (DEFAULT 0.00, CHECK >= 0)"
+    }

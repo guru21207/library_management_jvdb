@@ -1,39 +1,76 @@
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Data Access Object (DAO) for Member entity.
+ * Handles database operations including member registration, validation, lookups, and deletion.
+ */
 public class MemberDAO {
 
-    // Register a member using a new connection
+    /**
+     * Registers a new member using a new database connection.
+     *
+     * @param member Member object to register
+     * @return true if registered successfully, false otherwise
+     * @throws IllegalArgumentException if member ID or name is empty
+     * @throws SQLException if a database constraint or connection error occurs
+     */
     public boolean addMember(Member member) throws SQLException {
         try (Connection con = Database_connection.getConnection()) {
             return addMember(con, member);
         }
     }
 
-    // Register a member using an existing connection
-    public boolean addMember(Connection con, Member member)
-            throws SQLException {
+    /**
+     * Registers a new member using an existing database connection.
+     *
+     * @param con Active database connection
+     * @param member Member object to register
+     * @return true if registered, false otherwise
+     * @throws SQLException if insert fails
+     */
+    public boolean addMember(Connection con, Member member) throws SQLException {
+        if (member == null) {
+            throw new IllegalArgumentException("Member details cannot be null.");
+        }
+        if (member.getMemberId() == null || member.getMemberId().trim().isEmpty()) {
+            throw new IllegalArgumentException("Member ID cannot be empty.");
+        }
+        if (member.getName() == null || member.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("Member name cannot be empty.");
+        }
 
-        String sql =
-                "INSERT INTO members (member_id, name) VALUES (?, ?)";
+        // Check if member ID is already registered
+        if (getMemberById(con, member.getMemberId().trim()) != null) {
+            throw new SQLException("A member with ID '" + member.getMemberId().trim() + "' is already registered.");
+        }
+
+        String sql = "INSERT INTO members (member_id, name) VALUES (?, ?)";
 
         try (PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, member.getMemberId());
-            ps.setString(2, member.getName());
+            ps.setString(1, member.getMemberId().trim());
+            ps.setString(2, member.getName().trim());
 
             return ps.executeUpdate() > 0;
+        } catch (SQLIntegrityConstraintViolationException e) {
+            throw new SQLException("A member with ID '" + member.getMemberId() + "' is already registered.", e);
         }
     }
 
-    // Get all members
+    /**
+     * Retrieves all registered library members.
+     *
+     * @return List of all members
+     * @throws SQLException if query fails
+     */
     public List<Member> getAllMembers() throws SQLException {
         List<Member> members = new ArrayList<>();
-        String sql = "SELECT * FROM members";
+        String sql = "SELECT * FROM members ORDER BY member_id ASC";
 
         try (Connection con = Database_connection.getConnection();
              PreparedStatement ps = con.prepareStatement(sql);
@@ -46,25 +83,30 @@ public class MemberDAO {
                 ));
             }
         }
-
         return members;
     }
 
-    // Find a member by ID using a new connection
+    /**
+     * Searches for a member by unique ID using a new connection.
+     */
     public Member getMemberById(String memberId) throws SQLException {
         try (Connection con = Database_connection.getConnection()) {
             return getMemberById(con, memberId);
         }
     }
 
-    // Find a member by ID using an existing connection
-    public Member getMemberById(Connection con, String memberId)
-            throws SQLException {
+    /**
+     * Searches for a member by unique ID using an existing connection.
+     */
+    public Member getMemberById(Connection con, String memberId) throws SQLException {
+        if (memberId == null || memberId.trim().isEmpty()) {
+            return null;
+        }
 
         String sql = "SELECT * FROM members WHERE member_id = ?";
 
         try (PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, memberId);
+            ps.setString(1, memberId.trim());
 
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
@@ -75,11 +117,46 @@ public class MemberDAO {
                 }
             }
         }
-
         return null;
     }
 
-    // Total registered members
+    /**
+     * Searches for members by keyword (matching member ID or name).
+     *
+     * @param keyword Substring to match
+     * @return List of matching members
+     * @throws SQLException if query fails
+     */
+    public List<Member> searchMembers(String keyword) throws SQLException {
+        List<Member> members = new ArrayList<>();
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return getAllMembers();
+        }
+
+        String pattern = "%" + keyword.trim() + "%";
+        String sql = "SELECT * FROM members WHERE member_id LIKE ? OR name LIKE ? ORDER BY member_id ASC";
+
+        try (Connection con = Database_connection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setString(1, pattern);
+            ps.setString(2, pattern);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    members.add(new Member(
+                            rs.getString("member_id"),
+                            rs.getString("name")
+                    ));
+                }
+            }
+        }
+        return members;
+    }
+
+    /**
+     * Total number of registered members.
+     */
     public int getTotalMembersCount() throws SQLException {
         String sql = "SELECT COUNT(*) FROM members";
         try (Connection con = Database_connection.getConnection();
@@ -92,28 +169,39 @@ public class MemberDAO {
         return 0;
     }
 
-    // Safely delete a member if no active or historical loans
+    /**
+     * Safely deletes a member from the directory.
+     * Rejects deletion if the member has active loans or borrowing history.
+     *
+     * @param memberId Member ID to remove
+     * @return true if deleted, false if not found
+     * @throws SQLException if active or historical loans prevent deletion
+     */
     public boolean deleteMember(String memberId) throws SQLException {
-        // Check active loans
+        if (memberId == null || memberId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Member ID cannot be empty.");
+        }
+
+        // 1. Check active loans
         String checkSql = "SELECT COUNT(*) FROM borrow_records WHERE member_id = ? AND return_date IS NULL";
         try (Connection con = Database_connection.getConnection();
              PreparedStatement ps = con.prepareStatement(checkSql)) {
-            ps.setString(1, memberId);
+            ps.setString(1, memberId.trim());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next() && rs.getInt(1) > 0) {
-                    throw new SQLException("Cannot delete member: Member has unreturned borrowed books.");
+                    throw new SQLException("Cannot delete member '" + memberId + "': Member currently has unreturned borrowed books.");
                 }
             }
         }
 
-        // Check historical records
+        // 2. Check historical records
         String histSql = "SELECT COUNT(*) FROM borrow_records WHERE member_id = ?";
         try (Connection con = Database_connection.getConnection();
              PreparedStatement ps = con.prepareStatement(histSql)) {
-            ps.setString(1, memberId);
+            ps.setString(1, memberId.trim());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next() && rs.getInt(1) > 0) {
-                    throw new SQLException("Cannot delete member: Member has historical borrowing transactions on record.");
+                    throw new SQLException("Cannot delete member '" + memberId + "': Member has historical borrowing transactions on record.");
                 }
             }
         }
@@ -121,20 +209,22 @@ public class MemberDAO {
         String deleteSql = "DELETE FROM members WHERE member_id = ?";
         try (Connection con = Database_connection.getConnection();
              PreparedStatement ps = con.prepareStatement(deleteSql)) {
-            ps.setString(1, memberId);
+            ps.setString(1, memberId.trim());
             return ps.executeUpdate() > 0;
         }
     }
 
-    // Update existing member details
+    /**
+     * Updates an existing member's information.
+     */
     public boolean updateMember(Member member) throws SQLException {
+        if (member == null) throw new IllegalArgumentException("Member cannot be null.");
         String sql = "UPDATE members SET name = ? WHERE member_id = ?";
         try (Connection con = Database_connection.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, member.getName());
-            ps.setString(2, member.getMemberId());
+            ps.setString(1, member.getName().trim());
+            ps.setString(2, member.getMemberId().trim());
             return ps.executeUpdate() > 0;
         }
     }
 }
-
