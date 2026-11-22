@@ -1,0 +1,18 @@
+# ==============================================================================
+# BookNest Library Management System - Database Configuration Template
+# ==============================================================================
+# INSTRUCTIONS:
+# 1. Copy this file and name it 'db.properties' in the project root directory:
+#      Copy-Item db.properties.example db.properties
+# 2. Update the credentials below to match your local MySQL Server settings.
+# 3. 'db.properties' is excluded by .gitignore and will not be committed to Git.
+#
+# Alternatively, you can configure these via environment variables:
+#   $env:BOOKNEST_DB_URL = "jdbc:mysql://localhost:3306/booknest"
+#   $env:BOOKNEST_DB_USER = "root"
+#   $env:BOOKNEST_DB_PASSWORD = "your_mysql_password"
+# ==============================================================================
+
+db.url=jdbc:mysql://localhost:3306/booknest
+db.user=root
+db.password=your_mysql_password_here

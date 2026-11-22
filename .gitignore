@@ -7,3 +7,4 @@
 
 # Local environment configuration
 .env
+db.properties
